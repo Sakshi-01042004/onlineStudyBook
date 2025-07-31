@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>📘 Full PDF Viewer with Pagination and Search</title>
+  <style>
+    body {
+      font-family: Arial;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      background-color: #f4f4f4;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    #sidebar {
+      width: 150px;
+      background: #e0e0e0;
+      overflow-y: auto;
+      padding: 10px;
+      height: 100vh;
+    }
+
+    #sidebar canvas {
+      width: 100%;
+      margin-bottom: 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+    }
+
+    #main {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    #controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #controls button, #controls input {
+      margin: 5px;
+      padding: 8px 12px;
+    }
+
+    #controls input[type="number"] {
+      width: 60px;
+    }
+
+    #controls button:hover {
+      background-color: rgb(113, 113, 223);
+      color: white;
+    }
+
+    #pdf-viewer canvas {
+      display: block;
+      margin: 10px auto;
+      border: 1px solid #ccc;
+    }
+
+    .dark-mode {
+      background-color: #1e1e1e;
+      color: #fff;
+    }
+
+    .dark-mode #sidebar {
+      background: #2b2b2b;
+    }
+
+    .dark-mode canvas {
+      background: #333;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+      }
+
+      #sidebar {
+        height: auto;
+        width: 100%;
+        display: flex;
+        overflow-x: auto;
+      }
+
+      #sidebar canvas {
+        width: auto;
+        height: 100px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Thumbnails Sidebar -->
+  <div id="sidebar"></div>
+
+  <!-- Main Content -->
+  <div id="main">
+    <h1 style="background-color: rgb(42, 43, 44); color: white;"></h1>
+
+    <div id="controls">
+      <button onclick="zoomIn()">Zoom In</button>
+      <button onclick="zoomOut()">Zoom Out</button>
+      <button onclick="downloadPDF()">Download PDF</button>
+      <button onclick="toggleTheme()">Toggle Dark/Light Mode</button>
+      <br>
+      <button onclick="prevPage()">Previous</button>
+      <span id="page-info">Page 1 of ?</span>
+      <button onclick="nextPage()">Next</button>
+      <input type="number" id="pageNumber" placeholder="Go to" min="1">
+      <button onclick="goToPage()">Go</button>
+      <br>
+      <input type="text" id="searchText" placeholder="Search text">
+      <button onclick="searchTextInPDF()">Search</button>
+    </div>
+
+    <div id="pdf-viewer">Class 9 Social Science - Economics English.pdf</div>
+  </div>
+
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <script>
+    const pdfPath = "Class 9 Social Science - Economics English.pdf"; // Make sure the PDF is in the same folder
+    let pdfDoc = null;
+    let scale = 1.2;
+    let currentPage = 1;
+
+    const viewer = document.getElementById("pdf-viewer");
+    const sidebar = document.getElementById("sidebar");
+    const pageInfo = document.getElementById("page-info");
+
+    // Load PDF
+    pdfjsLib.getDocument(pdfPath).promise.then(async function (pdf) {
+      pdfDoc = pdf;
+      updatePageInfo();
+      await renderPage(currentPage);
+      await renderThumbnails();
+    });
+
+    function updatePageInfo() {
+      pageInfo.textContent = `Page ${currentPage} of ${pdfDoc.numPages}`;
+    }
+
+    async function renderPage(pageNum) {
+      viewer.innerHTML = '';
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      viewer.appendChild(canvas);
+    }
+
+    async function renderThumbnails() {
+      sidebar.innerHTML = '';
+      for (let num = 1; num <= pdfDoc.numPages; num++) {
+        const page = await pdfDoc.getPage(num);
+        const viewport = page.getViewport({ scale: 0.25 });
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        canvas.addEventListener("click", () => {
+          currentPage = num;
+          renderPage(currentPage);
+          updatePageInfo();
+        });
+        sidebar.appendChild(canvas);
+      }
+    }
+
+    // Zoom Controls
+    function zoomIn() {
+      scale += 0.2;
+      renderPage(currentPage);
+    }
+
+    function zoomOut() {
+      if (scale > 0.4) {
+        scale -= 0.2;
+        renderPage(currentPage);
+      }
+    }
+
+    // Page Navigation
+    function nextPage() {
+      if (currentPage < pdfDoc.numPages) {
+        currentPage++;
+        renderPage(currentPage);
+        updatePageInfo();
+      }
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderPage(currentPage);
+        updatePageInfo();
+      }
+    }
+
+    function goToPage() {
+      const pageNum = parseInt(document.getElementById("pageNumber").value);
+      if (pageNum >= 1 && pageNum <= pdfDoc.numPages) {
+        currentPage = pageNum;
+        renderPage(currentPage);
+        updatePageInfo();
+      }
+    }
+
+    // Search (basic: only scrolls to page with match)
+    async function searchTextInPDF() {
+      const query = document.getElementById("searchText").value.toLowerCase();
+      if (!query) return alert("Please enter text to search.");
+      
+      for (let num = 1; num <= pdfDoc.numPages; num++) {
+        const page = await pdfDoc.getPage(num);
+        const textContent = await page.getTextContent();
+        const textItems = textContent.items.map(item => item.str.toLowerCase());
+        if (textItems.join(' ').includes(query)) {
+          currentPage = num;
+          renderPage(currentPage);
+          updatePageInfo();
+          alert(`Found on page ${num}`);
+          return;
+        }
+      }
+      alert("Text not found in PDF.");
+    }
+
+    // Download
+    function downloadPDF() {
+      const link = document.createElement("a");
+      link.href = pdfPath;
+      link.download = pdfPath.split('/').pop();
+      link.click();
+    }
+
+    // Theme Toggle
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+    }
+  </script>
+
+</body>
+</html>
